@@ -43,22 +43,23 @@ class EmbeddingInterface:
     @public
     def CreateKnowledgeBase(self, all_knowledge):
         embeddings = self.CreateEmbeddings(all_knowledge)
-
         self.index.add(embeddings)
         assert len(embeddings) == len(all_knowledge)
         for index, embedding in enumerate(embeddings):
             self.knowledge_base[index] = all_knowledge[index]
 
     @public
-    def QueryKnowledgeBase(self, query_text, k=3, verbose = True):
+    def QueryKnowledgeBase(self, query_text, k=3, verbose=True):
         query_embedding = self.CreateEmbedding(query_text)
         k = min(k, len(self.knowledge_base))
         distances, indices = self.index.search(query_embedding, k)
-        if verbose:
-            for i, idx in enumerate(indices[0]):
-                knowledge = self.knowledge_base[idx]
+        knowledges = []
+        for i, idx in enumerate(indices[0]):
+            knowledge = self.knowledge_base[idx]
+            knowledges.append(str(knowledge))
+            if verbose:
                 print(f"similarity: {distances[0][i]:.4f}\nmatching text: \n{knowledge}\n")
-
+        return knowledges
 
 class GLMInterface:
     def __init__(self, zhipuai_api_key, model="glm-4"):
@@ -70,8 +71,8 @@ class GLMInterface:
     @public
     def SendMessages(self, role="user", prompt=""):
         response = self.client.chat.completions.create(
-            semodel=self.model,
-            messages=[{"role": self.role, "content": prompt}],
+            model=self.model,
+            messages=[{"role": role, "content": prompt}],
             top_p=0.0,
             temperature=0.0,
             stream=True,
@@ -84,12 +85,33 @@ class GLMInterface:
         return response
 
     @public
+    def SendMessagesWithSystem(self, system, question):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": question},
+            ],
+            top_p=0.0,
+            temperature=0.0,
+            stream=True,
+            max_tokens=2000,
+        )
+        if response:
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                self._PrintWithTypewriterEffect(content)
+            print("\n")
+        return response
+
+    @public
     def CreateKnowledgeBase(self, all_knowledge):
         self.embeddings.CreateKnowledgeBase(all_knowledge)
 
     @public
     def QueryKnowledgeBase(self, query_text, k=2, verbose = True):
-        self.embeddings.QueryKnowledgeBase(query_text, k, verbose)
+        knowledges = self.embeddings.QueryKnowledgeBase(query_text, k, verbose)
+        return knowledges
 
     @private
     def _PrintWithTypewriterEffect(self, text, delay=0.05):
